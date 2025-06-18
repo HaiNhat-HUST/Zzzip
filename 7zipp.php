@@ -20,14 +20,13 @@ if (isset($_FILES["file_to_upload"]) && $_FILES["file_to_upload"]["error"] == 0)
     $target_file = $upload_dir . basename($_FILES["file_to_upload"]["name"]);
     $file_type = checkFileExt($target_file);
 
-    // Kiểm tra phần mở rộng
+
     if (!in_array($file_type, $allowedExt)) {
         $_SESSION['message'] = "Không cho phép phần mở rộng file: " . htmlspecialchars($file_type);
         header("Location: index.php");
         exit();
     }
 
-    // Kiểm tra MIME type
     $fileMimeType = finfo_file($finfo, $_FILES['file_to_upload']['tmp_name']);
     if (!in_array($fileMimeType, $allowedMime)) {
         $_SESSION['message'] = "Không cho phép MIME type: " . htmlspecialchars($fileMimeType);
@@ -35,7 +34,6 @@ if (isset($_FILES["file_to_upload"]) && $_FILES["file_to_upload"]["error"] == 0)
         exit();
     }
 
-    // Nếu là file zip thì kiểm tra các file bên trong
     if ($file_type === "zip" || $fileMimeType === "application/zip") {
         $zip = new ZipArchive;
         $res = $zip->open($_FILES['file_to_upload']['tmp_name']);
@@ -44,7 +42,7 @@ if (isset($_FILES["file_to_upload"]) && $_FILES["file_to_upload"]["error"] == 0)
             for ($i = 0; $i < $zip->numFiles; $i++) {
                 $filename = $zip->getNameIndex($i);
 
-                if (substr($filename, -1) === '/') continue; // bỏ qua thư mục
+                if (substr($filename, -1) === '/') continue;
 
                 $entry_ext = checkFileExt($filename);
                 if (!in_array($entry_ext, $allowedExt)) {
@@ -60,7 +58,7 @@ if (isset($_FILES["file_to_upload"]) && $_FILES["file_to_upload"]["error"] == 0)
                     $entryMimeType = $finfo->buffer($buffer);
 
                     if (!in_array($entryMimeType, $allowedMime)) {
-                        $_SESSION['message'] = "File trong zip có MIME không hợp lệ: " . htmlspecialchars($filename);
+                        $_SESSION['message'] = "File trong zip có MIME không hợp lệ: ".$entryMimeType . ' ' . htmlspecialchars($filename);
                         header("Location: index.php");
                         exit();
                     }

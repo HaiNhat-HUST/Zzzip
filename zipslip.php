@@ -1,102 +1,93 @@
 <?php
+// thư mục upload có file .htaccess , không có cơ chế kiểm tra file ext hay mime type
+// kẻ tấn công upload file ra ngoài thư mục upload
 
-$allowedExt = ['jpg', 'jpeg', 'png', 'gif', 'pdf', 'zip','txt'];
-$allowedMime = ['image/jpeg', 'image/png', 'image/gif', 'application/pdf', 'application/zip', 'text/plain'];
+session_start();
+
+$allowedExt = ['jpg', 'jpeg', 'png', 'gif',  'zip'];
+$allowedMime = ['image/jpeg', 'image/png', 'image/gif', 'application/zip'];
+
 $upload_dir = __DIR__ . '/uploads/';
 
-if (!is_dir($upload_dir)){
+if (!is_dir($upload_dir)) {
     mkdir($upload_dir);
-};
+}
 
 $finfo = finfo_open(FILEINFO_MIME_TYPE);
 
-
-function checkFileExt($filename){
-    $file_type = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
-    return $file_type;
+function checkFileExt($filename) {
+    return strtolower(pathinfo($filename, PATHINFO_EXTENSION));
 }
 
+function traversalCheck($filename) {
+    $filename = str_replace(['../', '..\\'], '', $filename);
+    return $filename;
+}
 
 if (isset($_FILES["file_to_upload"]) && $_FILES["file_to_upload"]["error"] == 0) {
 
     $target_file = $upload_dir . basename($_FILES["file_to_upload"]["name"]);
-    
-    echo "<h3>" . $target_file . "</h3>";
 
+    // kiểm tra file upload
     $file_type = checkFileExt($target_file);
-
-    if (!in_array($file_type, $allowedExt)){
-        die("Unallowed file extension");
+    if (!in_array($file_type, $allowedExt)) {
+        $_SESSION['message'] = "Không cho phép phần mở rộng file: " . htmlspecialchars($file_type);
+        header("Location: index.php");
+        exit();
+    }
+    $fileMimeType = finfo_file($finfo, $_FILES['file_to_upload']['tmp_name']);
+    if (!in_array($fileMimeType, $allowedMime)) {
+        $_SESSION['message'] = "Không cho phép MIME type: " . htmlspecialchars($fileMimeType);
+        header("Location: index.php");
+        exit();
     }
 
-    // check mime type
-    $fileMimeType = finfo_file($finfo,$_FILES['file_to_upload']['tmp_name']);
-    if(!in_array($fileMimeType, $allowedMime)){
-        die("Unallowed mime type");
-    }
-
-    // nếu mime type là zip
-    if ($file_type == "zip" || $fileMimeType == "application/zip") {
-
-        $isValid = true;
+    
+    // xử lí file zip
+    if ($file_type === "zip" || $fileMimeType === "application/zip") {
         $zip = new ZipArchive;
-
         $res = $zip->open($_FILES['file_to_upload']['tmp_name']);
-        
         if ($res === TRUE) {
+            for ($i = 0; $i < $zip->numFiles; $i++) {
 
-            // kiểm tra file entry
-            for ($i = 0 ; $i < $zip -> numFiles; $i++) {
-                $filename = $zip->getNameIndex($i);
+                // không có cơ chế kiểm tra file extension và mimetype thay vào đó bảo vệ bằng config .htaccess
+                $entryName = $zip->getNameIndex($i);
+
+                // kiểm tra pathtraversal nhưng chưa đủ an toàn
+                $entryName = traversalCheck($entryName);
+
+                // sử dụng cơ chế giải nén thủ công thay vì ZipArchive để mô phỏng zipslip
+                $contents = $zip->getFromIndex($i);
                 
-                // Bỏ qua các thư mục
-                if (substr($filename, -1) === '/') {
-                    continue;
-                };
-
-                // kiểm tra extension của file entry
-                $entry_ext = checkFileExt($filename);
-                if(!in_array($entry_ext, $allowedExt)){
-                    die("Zip have unallowed file entry: " . $entry_ext);         // có thể thay đổi phần để an toàn hơn
+                // kiểm tra chữ kí đầu tệp
+                $buffer = substr($content, 0 , 1024);
+                $entryMimeType = $finfo->buffer($buffer);
+                if(!in_array($entryMimeType, $allowedMime)) {
+                     $_SESSION['message'] = "File trong zip có MIME không hợp lệ: " . htmlspecialchars($entryMimeType) . " cho " . htmlspecialchars($entryName);
+                    header("Location: index.php");
+                    exit();
                 }
+                
+                $dest = $upload_dir . $entryName;
 
-                // kiểm tra mimetype của file entry
-                $stream = $zip->getStream($filename);
-                if ($stream) {
-
-                    $buffer = fread($stream, 1024);
-                    fclose($stream);
-                    $entryMimeType = $finfo->buffer($buffer);
-
-                    if ( !in_array($entryMimeType, $allowedMime)) {
-                        die("Zipfile have file entry with inallowed MIME type: " . $filename);
-                    }
-
-                } else {
-                    die("Unable to check the mime type of zip's file entries");
-  
-                }
-
+                file_put_contents($dest, $contents);
             }
 
-            $zip->close();
-            
-            if(!system('7z e ' . escapeshellarg($_FILES['file_to_upload']['tmp_name']) . ' -o' . escapeshellarg($upload_dir))){
-                die("error urcur when extract file with 7z x");
-            };
-            unlink($_FILES['file_to_upload']['tmp_name']); 
-
-
+            $_SESSION['message'] = "Giải nén thành công với Zip Archive!" . $fileEntries . "with content: " . $contents;
         } else {
-            echo 'Failed to extract zip archive.';
+            $_SESSION['message'] = "Không thể mở file zip.";
         }
     } else {
-        move_uploaded_file($_FILES["file_to_upload"]["tmp_name"], $target_file);
+        if (move_uploaded_file($_FILES["file_to_upload"]["tmp_name"], $target_file)) {
+            $_SESSION['message'] = "Upload file thành công!";
+        } else {
+            $_SESSION['message'] = "Không thể lưu file.";
+        }
     }
 
+} else {
+    $_SESSION['message'] = "Không có file nào được gửi hoặc có lỗi khi upload.";
 }
 
-// Chuyển hướng người dùng trở lại trang chính
-header("location: index.php");
+header("Location: index.php");
 exit();
-?>
