@@ -64,12 +64,28 @@ function get_icon($filename) {
                     <button class="btn-icon">☰</button>
                     <button class="btn-secondary" disabled>Create Folder</button>
                     
-                    <form action="upload.php" method="post" enctype="multipart/form-data" id="upload-form" style="display: inline-block;">
+                    <form method="post" enctype="multipart/form-data" id="upload-form" style="display: inline-block;">
+                        <select id="endpoint-selector" class="btn-secondary" style="padding: 4px; margin-right: 10px;">
+                            <option value="ziparchive.php">Extract zip with PHP ZipArchive</option>
+                            <option value="unzip.php">Extract zip with unzip tool</option>
+                            <option value="7zipp.php">Extract zip with 7zip</option>
+                            <option value="zipslip.php">ZipSlip</option>
+                        </select>
+
                         <label for="file-upload" class="btn-primary">
                             ⇧ Upload File
                         </label>
-                        <input id="file-upload" name="file_to_upload" type="file" style="display:none;" onchange="document.getElementById('upload-form').submit();">
+                        <input id="file-upload" name="file_to_upload" type="file" style="display:none;">
                     </form>
+
+                    <script>
+                        document.getElementById('file-upload').addEventListener('change', function () {
+                            const form = document.getElementById('upload-form');
+                            const selectedEndpoint = document.getElementById('endpoint-selector').value;
+                            form.action = selectedEndpoint;
+                            form.submit();
+                        });
+                    </script>
                 </div>
             </div>
 
